@@ -3,8 +3,15 @@
 import { describe, expect, it } from "bun:test"
 import { createTimestampTransformer, createTimestampedStdoutController } from "./timestamp-output"
 
-function createLocalDate(hours: number, minutes: number, seconds: number): Date {
-  return new Date(2026, 1, 19, hours, minutes, seconds)
+function createUtcDate(hours: number, minutes: number, seconds: number): Date {
+  return new Date(Date.UTC(2026, 1, 19, hours, minutes, seconds))
+}
+
+function formatExpectedTimestamp(date: Date): string {
+  const hh = String(date.getHours()).padStart(2, "0")
+  const mm = String(date.getMinutes()).padStart(2, "0")
+  const ss = String(date.getSeconds()).padStart(2, "0")
+  return `[${hh}:${mm}:${ss}]`
 }
 
 interface MockWriteStream {
@@ -45,19 +52,22 @@ function createMockWriteStream(): MockWriteStream {
 describe("createTimestampTransformer", () => {
   it("prefixes each output line with timestamp", () => {
     // given
-    const now = () => createLocalDate(12, 34, 56)
+    const nowDate = createUtcDate(12, 34, 56)
+    const now = () => nowDate
     const transform = createTimestampTransformer(now)
 
     // when
     const output = transform("hello\nworld")
 
     // then
-    expect(output).toBe("[12:34:56] hello\n[12:34:56] world")
+    const timestamp = formatExpectedTimestamp(nowDate)
+    expect(output).toBe(`${timestamp} hello\n${timestamp} world`)
   })
 
   it("keeps line-start state across chunk boundaries", () => {
     // given
-    const now = () => createLocalDate(1, 2, 3)
+    const nowDate = createUtcDate(1, 2, 3)
+    const now = () => nowDate
     const transform = createTimestampTransformer(now)
 
     // when
@@ -66,14 +76,16 @@ describe("createTimestampTransformer", () => {
     const third = transform("\nnext")
 
     // then
-    expect(first).toBe("[01:02:03] hello")
+    const timestamp = formatExpectedTimestamp(nowDate)
+    expect(first).toBe(`${timestamp} hello`)
     expect(second).toBe(" world")
-    expect(third).toBe("\n[01:02:03] next")
+    expect(third).toBe(`\n${timestamp} next`)
   })
 
   it("returns empty string for empty chunk", () => {
     // given
-    const transform = createTimestampTransformer(() => createLocalDate(1, 2, 3))
+    const nowDate = createUtcDate(1, 2, 3)
+    const transform = createTimestampTransformer(() => nowDate)
 
     // when
     const output = transform("")
